@@ -9,7 +9,7 @@ migrate((app) => {
     createRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     updateRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     deleteRule: "@request.auth.role = 'admin'",
-    schema: [
+    fields: [
       { name: "name", type: "text", required: true },
       { name: "address", type: "text" },
       { name: "notes", type: "text" },
@@ -26,8 +26,8 @@ migrate((app) => {
     createRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     updateRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     deleteRule: "@request.auth.role = 'admin'",
-    schema: [
-      { name: "object", type: "relation", required: true, options: { collectionId: objects.id, maxSelect: 1 } },
+    fields: [
+      { name: "object", type: "relation", required: true, collectionId: objects.id, maxSelect: 1 },
       { name: "name", type: "text", required: true },
       { name: "location", type: "text" },
       { name: "notes", type: "text" },
@@ -44,8 +44,8 @@ migrate((app) => {
     createRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     updateRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     deleteRule: "@request.auth.role = 'admin'",
-    schema: [
-      { name: "cabinet", type: "relation", required: true, options: { collectionId: cabinets.id, maxSelect: 1 } },
+    fields: [
+      { name: "cabinet", type: "relation", required: true, collectionId: cabinets.id, maxSelect: 1 },
       { name: "name", type: "text", required: true },
       { name: "position", type: "text" },
     ],
@@ -61,8 +61,8 @@ migrate((app) => {
     createRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     updateRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     deleteRule: "@request.auth.role = 'admin'",
-    schema: [
-      { name: "rack", type: "relation", required: true, options: { collectionId: racks.id, maxSelect: 1 } },
+    fields: [
+      { name: "rack", type: "relation", required: true, collectionId: racks.id, maxSelect: 1 },
       { name: "number", type: "text", required: true },
       { name: "type", type: "text" },
       { name: "notes", type: "text" },
@@ -79,11 +79,11 @@ migrate((app) => {
     createRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     updateRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     deleteRule: "@request.auth.role = 'admin'",
-    schema: [
-      { name: "box", type: "relation", required: true, options: { collectionId: boxes.id, maxSelect: 1 } },
+    fields: [
+      { name: "box", type: "relation", required: true, collectionId: boxes.id, maxSelect: 1 },
       { name: "number", type: "text", required: true },
       { name: "type", type: "text" },
-      { name: "pair_count", type: "number", required: true, options: { min: 1, max: 100 } },
+      { name: "pair_count", type: "number", required: true, min: 1, max: 100 },
     ],
   });
   app.save(plints);
@@ -97,9 +97,9 @@ migrate((app) => {
     createRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     updateRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     deleteRule: "@request.auth.role = 'admin'",
-    schema: [
-      { name: "plint", type: "relation", required: true, options: { collectionId: plints.id, maxSelect: 1 } },
-      { name: "pair_number", type: "number", required: true, options: { min: 1, max: 100 } },
+    fields: [
+      { name: "plint", type: "relation", required: true, collectionId: plints.id, maxSelect: 1 },
+      { name: "pair_number", type: "number", required: true, min: 1, max: 100 },
       { name: "label", type: "text" },
     ],
   });
@@ -114,11 +114,11 @@ migrate((app) => {
     createRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     updateRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     deleteRule: "@request.auth.role = 'admin'",
-    schema: [
+    fields: [
       { name: "name", type: "text", required: true },
       { name: "type", type: "text" },
-      { name: "from_object", type: "relation", options: { collectionId: objects.id, maxSelect: 1 } },
-      { name: "to_object", type: "relation", options: { collectionId: objects.id, maxSelect: 1 } },
+      { name: "from_object", type: "relation", collectionId: objects.id, maxSelect: 1 },
+      { name: "to_object", type: "relation", collectionId: objects.id, maxSelect: 1 },
       { name: "notes", type: "text" },
     ],
   });
@@ -133,8 +133,8 @@ migrate((app) => {
     createRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     updateRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     deleteRule: "@request.auth.role = 'admin'",
-    schema: [
-      { name: "cable", type: "relation", required: true, options: { collectionId: cables.id, maxSelect: 1 } },
+    fields: [
+      { name: "cable", type: "relation", required: true, collectionId: cables.id, maxSelect: 1 },
       { name: "core_number", type: "number", required: true },
       { name: "color", type: "text" },
     ],
@@ -150,11 +150,11 @@ migrate((app) => {
     createRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     updateRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     deleteRule: "@request.auth.role = 'admin'",
-    schema: [
-      { name: "from_pair", type: "relation", options: { collectionId: pairs.id, maxSelect: 1 } },
-      { name: "from_core", type: "relation", options: { collectionId: cores.id, maxSelect: 1 } },
-      { name: "to_pair", type: "relation", options: { collectionId: pairs.id, maxSelect: 1 } },
-      { name: "to_core", type: "relation", options: { collectionId: cores.id, maxSelect: 1 } },
+    fields: [
+      { name: "from_pair", type: "relation", collectionId: pairs.id, maxSelect: 1 },
+      { name: "from_core", type: "relation", collectionId: cores.id, maxSelect: 1 },
+      { name: "to_pair", type: "relation", collectionId: pairs.id, maxSelect: 1 },
+      { name: "to_core", type: "relation", collectionId: cores.id, maxSelect: 1 },
       { name: "connection_type", type: "text", required: true },
       { name: "description", type: "text" },
     ],
@@ -170,11 +170,11 @@ migrate((app) => {
     createRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     updateRule: "@request.auth.role = 'editor' || @request.auth.role = 'admin'",
     deleteRule: "@request.auth.role = 'admin'",
-    schema: [
-      { name: "object", type: "relation", required: true, options: { collectionId: objects.id, maxSelect: 1 } },
+    fields: [
+      { name: "object", type: "relation", required: true, collectionId: objects.id, maxSelect: 1 },
       { name: "name", type: "text", required: true },
       { name: "type", type: "text" },
-      { name: "connected_pair", type: "relation", options: { collectionId: pairs.id, maxSelect: 1 } },
+      { name: "connected_pair", type: "relation", collectionId: pairs.id, maxSelect: 1 },
     ],
   });
   app.save(localEquipment);
