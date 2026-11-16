@@ -31,16 +31,10 @@ export async function pullChanges(collection: string, checkpointKey: string): Pr
   const meta = await db.meta.get(checkpointKey)
   const checkpoint = meta?.value || '1970-01-01 00:00:00.000Z'
 
-  let records: any[] = []
-  try {
-    records = await pb.collection(collection).getFullList({
-      filter: `updated > "${checkpoint}"`,
-      sort: 'updated',
-    })
-  } catch (e) {
-    console.error(`pull failed for ${collection}`, e)
-    return 0
-  }
+  const records = await pb.collection(collection).getFullList({
+    filter: `updated > "${checkpoint}"`,
+    sort: 'updated',
+  })
 
   for (const rec of records) {
     await db.table(collection).put(rec)
@@ -62,8 +56,14 @@ export async function syncAll(): Promise<{ pushed: number; pulled: number; faile
   }
   const pushResult = await pushOutbox()
   let pulled = 0
+  let pullFailed = 0
   for (const col of COLLECTIONS) {
-    pulled += await pullChanges(col, `sync_${col}`)
+    try {
+      pulled += await pullChanges(col, `sync_${col}`)
+    } catch (e) {
+      console.error(`pull failed for ${col}`, e)
+      pullFailed++
+    }
   }
-  return { pushed: pushResult.synced, pulled, failed: pushResult.failed }
+  return { pushed: pushResult.synced, pulled, failed: pushResult.failed + pullFailed }
 }

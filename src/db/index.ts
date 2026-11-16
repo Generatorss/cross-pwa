@@ -26,7 +26,7 @@ export class CrossDB extends Dexie {
 
   constructor() {
     super('CrossDB')
-    this.version(1).stores({
+    this.version(2).stores({
       objects: 'id, name, updated',
       cabinets: 'id, object, name, updated',
       racks: 'id, cabinet, name, updated',
