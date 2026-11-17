@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { pb } from '@/api/pocketbase'
+import { startAutoSync, online, syncing, pendingCount, lastSyncAt, lastError, runSync } from '@/composables/useAutoSync'
 
 const sidebarOpen = ref(false)
 const user = ref<any>(pb.authStore.model)
@@ -11,9 +12,18 @@ pb.authStore.onChange(() => {
   user.value = pb.authStore.model
 })
 
+startAutoSync()
+
 function logout() {
   pb.authStore.clear()
   router.push('/login')
+}
+
+function netTitle() {
+  const parts: string[] = []
+  if (lastSyncAt.value) parts.push(`Последняя синхронизация: ${new Date(lastSyncAt.value).toLocaleString('ru-RU')}`)
+  if (lastError.value) parts.push(`Ошибка: ${lastError.value}`)
+  return parts.join(' · ') || 'Автосинхронизация включена'
 }
 </script>
 
@@ -34,6 +44,21 @@ function logout() {
       <header class="topbar">
         <button class="menu-toggle" @click="sidebarOpen = !sidebarOpen">☰</button>
         <div class="topbar-spacer"></div>
+        <button
+          v-if="user"
+          class="net-chip"
+          :class="{ on: online, off: !online, busy: syncing }"
+          :title="netTitle()"
+          :disabled="syncing || !online"
+          @click="runSync()"
+        >
+          <span class="dot"></span>{{ syncing ? 'Синхронизация…' : online ? 'Онлайн' : 'Офлайн' }}
+        </button>
+        <span
+          v-if="pendingCount && user"
+          class="pending-badge"
+          :title="`Не отправлено на сервер: ${pendingCount}`"
+        >📤 {{ pendingCount }}</span>
         <div v-if="user" class="user-chip">
           <span class="user-email">{{ user.email }}</span>
           <span class="user-role" :class="`role-${user.role || 'none'}`">{{ user.role || 'нет роли' }}</span>
@@ -79,6 +104,21 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .role-editor { background: #dbeafe; color: #1e40af; }
 .role-viewer { background: #e5e7eb; color: #374151; }
 .role-none { background: #fef3c7; color: #92400e; }
+.net-chip {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.2rem 0.6rem; border-radius: 12px;
+  font-size: 0.75rem; font-weight: 500;
+  border: none; cursor: pointer;
+}
+.net-chip.on { background: #dcfce7; color: #166534; }
+.net-chip.off { background: #fee2e2; color: #991b1b; }
+.net-chip.busy { opacity: 0.7; cursor: wait; }
+.net-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.pending-badge {
+  background: #fbbf24; color: #78350f;
+  padding: 0.2rem 0.6rem; border-radius: 12px;
+  font-size: 0.75rem; font-weight: 500;
+}
 .logout-btn {
   padding: 0.25rem 0.6rem; border: 1px solid #cbd5e1;
   background: #fff; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
