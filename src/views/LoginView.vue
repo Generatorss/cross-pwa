@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { pb } from '@/api/pocketbase'
+import { pb, pbUrlMissing } from '@/api/pocketbase'
 
 const email = ref('')
 const password = ref('')
@@ -26,6 +26,10 @@ async function submit() {
 <template>
   <div class="login">
     <h2>Вход</h2>
+    <p v-if="pbUrlMissing" class="warn">
+      Адрес PocketBase не задан. Создайте файл <code>.env</code> по образцу
+      <code>.env.example</code> и укажите <code>VITE_PB_URL</code>.
+    </p>
     <form @submit.prevent="submit">
       <label>
         Email
@@ -75,4 +79,13 @@ button:disabled {
   color: #b91c1c;
   font-size: 0.9rem;
 }
+.warn {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+}
+.warn code { background: #fde68a; padding: 0 0.2rem; border-radius: 3px; }
 </style>

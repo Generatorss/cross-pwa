@@ -1,4 +1,4 @@
-import { pb } from '@/api/pocketbase'
+import { pb, pbUrlMissing } from '@/api/pocketbase'
 import { db, type OutboxItem } from '@/db'
 
 export async function pushOutbox(): Promise<{ synced: number; failed: number }> {
@@ -71,6 +71,9 @@ const COLLECTIONS = [
 ] as const
 
 export async function syncAll(): Promise<{ pushed: number; pulled: number; failed: number }> {
+  if (pbUrlMissing) {
+    throw new Error('VITE_PB_URL не задан — укажите адрес PocketBase в .env (см. .env.example)')
+  }
   if (!pb.authStore.isValid) {
     throw new Error('Требуется авторизация')
   }
