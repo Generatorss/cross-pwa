@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useCrud } from '@/composables/useCrud'
+import { useAuth } from '@/composables/useAuth'
 import { syncAll } from '@/sync/engine'
 import { db } from '@/db'
-import { pb } from '@/api/pocketbase'
+
+const { isAdmin, isViewer, canEdit } = useAuth()
 
 interface FaultTypeRecord {
   id: string
@@ -44,11 +46,22 @@ function cancelEdit() {
 }
 
 async function remove(id: string) {
-  if (pb.authStore.model?.role !== 'admin') {
+  if (!isAdmin.value) {
     alert('Удаление доступно только администратору.')
     return
   }
-  if (!confirm('Удалить тип неисправности? Существующие записи о неисправностях могут стать некорректными.')) return
+  // Защита справочника снизу вверх: нельзя удалить тип, пока он используется в неисправностях
+  const used = await db.faults.where('fault_type').equals(id).count()
+  if (used > 0) {
+    alert(
+      `Нельзя удалить тип неисправности: он используется в ${used} записях о неисправностях. ` +
+      `Сначала удалите эти записи.`
+    )
+    return
+  }
+  const target = crud.items.value.find((f) => f.id === id)
+  const label = target ? `тип неисправности «${target.name}»` : 'тип неисправности'
+  if (!confirm(`Удалить ${label}?`)) return
   try {
     await crud.remove(id)
     await refreshPending()
@@ -93,7 +106,8 @@ onMounted(async () => {
       неисправностей на парах.
     </p>
 
-    <form @submit.prevent="save" class="form">
+    <p v-if="isViewer" class="readonly-hint">Режим просмотра: добавление и правка недоступны.</p>
+    <form v-if="canEdit" @submit.prevent="save" class="form">
       <input v-model="form.name" placeholder="Название типа *" required size="40" />
       <input v-model="form.notes" placeholder="Примечания" size="50" />
       <button type="submit">{{ editingId ? 'Сохранить' : 'Добавить' }}</button>
@@ -109,8 +123,8 @@ onMounted(async () => {
           <td>{{ f.name }}</td>
           <td>{{ f.notes }}</td>
           <td class="row-actions">
-            <button @click="edit(f)">✏️</button>
-            <button v-if="pb.authStore.model?.role === 'admin'" @click="remove(f.id)">🗑️</button>
+            <button v-if="canEdit" @click="edit(f)">✏️</button>
+            <button v-if="isAdmin" @click="remove(f.id)">🗑️</button>
           </td>
         </tr>
       </tbody>
@@ -132,4 +146,5 @@ th, td { border-bottom: 1px solid #e5e7eb; padding: 0.5rem; text-align: left; }
 .row-actions { white-space: nowrap; }
 .row-actions button { border: none; background: none; cursor: pointer; font-size: 1.1rem; }
 .sync-status { color: #475569; font-size: 0.9rem; margin-bottom: 0.5rem; }
+.readonly-hint { color: #94a3b8; font-size: 0.85rem; font-style: italic; margin-bottom: 0.5rem; }
 </style>

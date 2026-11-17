@@ -2,10 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCrud } from '@/composables/useCrud'
+import { useAuth } from '@/composables/useAuth'
 import { syncAll } from '@/sync/engine'
 import { db } from '@/db'
-import { pb } from '@/api/pocketbase'
-import { enqueueDelete } from '@/utils/outbox'
+import { countCascade, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
 
 interface BoxRecord {
   id: string
@@ -24,6 +24,7 @@ const objectId = ref('')
 const objectName = ref('')
 
 const crud = useCrud<BoxRecord>('boxes')
+const { isAdmin, isViewer, canEdit } = useAuth()
 const form = ref({ number: '', type: '', notes: '' })
 const editingId = ref<string | null>(null)
 const syncStatus = ref('')
@@ -34,7 +35,6 @@ const filteredItems = computed(() =>
   crud.items.value.filter((b) => b.rack === rackId)
 )
 
-const isAdmin = computed(() => pb.authStore.model?.role === 'admin')
 const allSelected = computed(
   () => filteredItems.value.length > 0 && selectedIds.value.size === filteredItems.value.length
 )
@@ -88,29 +88,10 @@ function cancelEdit() {
   form.value = { number: '', type: '', notes: '' }
 }
 
-/** Двойной каскад: pairs → plints → boxes. */
+/** Каскадное удаление боксов: плинты → пары → привязки, снизу вверх. */
 async function deleteCascade(boxIds: string[]) {
-  const now = new Date().toISOString()
-
   for (const boxId of boxIds) {
-    const boxPlints = await db.plints.where('box').equals(boxId).toArray()
-    console.log(`[cascade] бокс ${boxId}: найдено ${boxPlints.length} плинтов`)
-
-    for (const plint of boxPlints) {
-      const plintPairs = await db.pairs.where('plint').equals(plint.id).toArray()
-      console.log(`[cascade]   плинт ${plint.id}: ${plintPairs.length} пар`)
-
-      for (const pair of plintPairs) {
-        await db.pairs.delete(pair.id)
-        await enqueueDelete('pairs', pair.id, now)
-      }
-
-      await db.plints.delete(plint.id)
-      await enqueueDelete('plints', plint.id, now)
-    }
-
-    await db.boxes.delete(boxId)
-    await enqueueDelete('boxes', boxId, now)
+    await cascadeDelete('boxes', boxId)
   }
 }
 
@@ -119,8 +100,11 @@ async function remove(id: string) {
     alert('Удаление доступно только администратору.')
     return
   }
-  if (!confirm('Удалить бокс? Все плинты и пары внутри также будут удалены.')) return
+  const target = filteredItems.value.find((b) => b.id === id)
+  const label = target ? `бокс «${target.number}»` : 'бокс'
   try {
+    const stats = await countCascade('boxes', id)
+    if (!confirm(cascadeConfirmText(label, stats))) return
     await deleteCascade([id])
     await crud.load()
     await refreshPending()
@@ -136,9 +120,9 @@ async function deleteSelected() {
   }
   const ids = Array.from(selectedIds.value)
   if (ids.length === 0) return
-  if (!confirm(`Удалить ${ids.length} бокс(ов)? Все плинты и пары внутри также будут удалены.`)) return
-
   try {
+    const stats = await countCascade('boxes', ids[0])
+    if (!confirm(cascadeConfirmText(`${ids.length} бокс(ов)`, stats))) return
     await deleteCascade(ids)
     selectedIds.value = new Set()
     await crud.load()
@@ -207,7 +191,8 @@ onMounted(async () => {
 
     <p v-if="syncStatus" class="sync-status">{{ syncStatus }}</p>
 
-    <form @submit.prevent="save" class="form">
+    <p v-if="isViewer" class="readonly-hint">Режим просмотра: добавление и правка недоступны.</p>
+    <form v-if="canEdit" @submit.prevent="save" class="form">
       <input v-model="form.number" placeholder="Номер бокса *" required />
       <input v-model="form.type" placeholder="Тип (например, 100-парный)" />
       <input v-model="form.notes" placeholder="Примечания" />
@@ -249,8 +234,8 @@ onMounted(async () => {
           <td>{{ b.type }}</td>
           <td>{{ b.notes }}</td>
           <td class="row-actions">
-            <button @click="edit(b)">✏️</button>
-            <button class="delete-btn" @click="remove(b.id)" :title="isAdmin ? 'Удалить' : 'Только для администратора'">🗑️</button>
+            <button v-if="canEdit" @click="edit(b)">✏️</button>
+            <button v-if="isAdmin" class="delete-btn" title="Удалить со всем содержимым" @click="remove(b.id)">🗑️</button>
           </td>
         </tr>
       </tbody>
@@ -283,4 +268,5 @@ th { background: #f8fafc; font-weight: 600; }
 .box-link { color: #1e40af; text-decoration: none; }
 .box-link:hover { text-decoration: underline; }
 .sync-status { color: #475569; font-size: 0.9rem; margin-bottom: 0.5rem; }
+.readonly-hint { color: #94a3b8; font-size: 0.85rem; font-style: italic; margin-bottom: 0.5rem; }
 </style>

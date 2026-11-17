@@ -2,10 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { usePlints, type PlintRecord } from '@/composables/usePlints'
+import { useAuth } from '@/composables/useAuth'
 import { syncAll } from '@/sync/engine'
 import { db } from '@/db'
-import { pb } from '@/api/pocketbase'
-import { enqueueDelete } from '@/utils/outbox'
+import { countCascade, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
 
 const route = useRoute()
 const boxId = route.params.boxId as string
@@ -18,6 +18,7 @@ const objectId = ref('')
 const objectName = ref('')
 
 const crud = usePlints()
+const { isAdmin, isViewer, canEdit } = useAuth()
 const form = ref({ number: '', type: '', pair_count: 10 })
 const editingId = ref<string | null>(null)
 const syncStatus = ref('')
@@ -28,7 +29,6 @@ const filteredItems = computed(() =>
   crud.items.value.filter((p) => p.box === boxId)
 )
 
-const isAdmin = computed(() => pb.authStore.model?.role === 'admin')
 const allSelected = computed(
   () => filteredItems.value.length > 0 && selectedIds.value.size === filteredItems.value.length
 )
@@ -85,24 +85,10 @@ function cancelEdit() {
   form.value = { number: '', type: '', pair_count: 10 }
 }
 
-/** Каскадное удаление одного плинта: сначала пары, потом плинт. */
+/** Каскадное удаление плинтов: пары → привязки пар → плинт, снизу вверх. */
 async function deleteCascade(plintIds: string[]) {
-  const now = new Date().toISOString()
-
-  // Для каждого плинта — явно находим его пары. Надёжнее, чем anyOf.
   for (const plintId of plintIds) {
-    const plintPairs = await db.pairs.where('plint').equals(plintId).toArray()
-    console.log(`[cascade] плинт ${plintId}: найдено ${plintPairs.length} пар`)
-
-    for (const pair of plintPairs) {
-      await db.pairs.delete(pair.id)
-      await enqueueDelete('pairs', pair.id, now)
-    }
-  }
-
-  for (const id of plintIds) {
-    await db.plints.delete(id)
-    await enqueueDelete('plints', id, now)
+    await cascadeDelete('plints', plintId)
   }
 }
 
@@ -111,8 +97,11 @@ async function remove(id: string) {
     alert('Удаление доступно только администратору.')
     return
   }
-  if (!confirm('Удалить плинт? Все его пары также будут удалены.')) return
+  const target = filteredItems.value.find((p) => p.id === id)
+  const label = target ? `плинт «${target.number}»` : 'плинт'
   try {
+    const stats = await countCascade('plints', id)
+    if (!confirm(cascadeConfirmText(label, stats))) return
     await deleteCascade([id])
     await crud.load()
     await refreshPending()
@@ -128,9 +117,9 @@ async function deleteSelected() {
   }
   const ids = Array.from(selectedIds.value)
   if (ids.length === 0) return
-  if (!confirm(`Удалить ${ids.length} плинт(ов)? Все их пары также будут удалены.`)) return
-
   try {
+    const stats = await countCascade('plints', ids[0])
+    if (!confirm(cascadeConfirmText(`${ids.length} плинт(ов)`, stats))) return
     await deleteCascade(ids)
     selectedIds.value = new Set()
     await crud.load()
@@ -206,12 +195,13 @@ onMounted(async () => {
 
     <p v-if="syncStatus" class="sync-status">{{ syncStatus }}</p>
 
+    <p v-if="isViewer" class="readonly-hint">Режим просмотра: добавление и правка недоступны.</p>
     <p class="hint">
       При создании плинта автоматически создаётся N пар (по полю «Пар»).
       Количество пар нельзя изменить после создания.
     </p>
 
-    <form @submit.prevent="save" class="form">
+    <form v-if="canEdit" @submit.prevent="save" class="form">
       <input v-model="form.number" placeholder="Номер плинта *" required />
       <input v-model="form.type" placeholder="Тип (10-парный)" />
       <input
@@ -261,8 +251,8 @@ onMounted(async () => {
           <td>{{ p.type }}</td>
           <td>{{ p.pair_count }}</td>
           <td class="row-actions">
-            <button @click="edit(p)">✏️</button>
-            <button class="delete-btn" @click="remove(p.id)" :title="isAdmin ? 'Удалить' : 'Только для администратора'">🗑️</button>
+            <button v-if="canEdit" @click="edit(p)">✏️</button>
+            <button v-if="isAdmin" class="delete-btn" title="Удалить со всем содержимым" @click="remove(p.id)">🗑️</button>
           </td>
         </tr>
       </tbody>
@@ -297,4 +287,5 @@ th { background: #f8fafc; font-weight: 600; }
 .plint-link { color: #1e40af; text-decoration: none; }
 .plint-link:hover { text-decoration: underline; }
 .sync-status { color: #475569; font-size: 0.9rem; margin-bottom: 0.5rem; }
+.readonly-hint { color: #94a3b8; font-size: 0.85rem; font-style: italic; margin-bottom: 0.5rem; }
 </style>

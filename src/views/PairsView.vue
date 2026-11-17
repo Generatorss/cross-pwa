@@ -3,8 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { syncAll } from '@/sync/engine'
 import { db, type OutboxItem } from '@/db'
-import { pb } from '@/api/pocketbase'
-import { enqueueDelete } from '@/utils/outbox'
+import { useAuth } from '@/composables/useAuth'
+import { countCascade, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
 
 interface PairRecord {
   id: string
@@ -15,6 +15,7 @@ interface PairRecord {
 
 const route = useRoute()
 const plintId = route.params.plintId as string
+const { isAdmin } = useAuth()
 
 const plintNumber = ref('')
 const plintType = ref('')
@@ -38,7 +39,6 @@ const sortedPairs = computed(() =>
   [...pairs.value].sort((a, b) => a.pair_number - b.pair_number)
 )
 
-const isAdmin = computed(() => pb.authStore.model?.role === 'admin')
 const allSelected = computed(
   () => sortedPairs.value.length > 0 && selectedIds.value.size === sortedPairs.value.length
 )
@@ -81,12 +81,10 @@ async function removePair(id: string) {
   }
   const pair = pairs.value.find((p) => p.id === id)
   const labelText = pair ? `${pair.label} (№${pair.pair_number})` : id
-  if (!confirm(`Удалить пару ${labelText}?`)) return
-
   try {
-    const now = new Date().toISOString()
-    await db.pairs.delete(id)
-    await enqueueDelete('pairs', id, now)
+    const stats = await countCascade('pairs', id)
+    if (!confirm(cascadeConfirmText(`пару ${labelText}`, stats))) return
+    await cascadeDelete('pairs', id)
     const next = new Set(selectedIds.value)
     next.delete(id)
     selectedIds.value = next
@@ -105,13 +103,12 @@ async function deleteSelected() {
   const ids = Array.from(selectedIds.value)
   if (ids.length === 0) return
 
-  if (!confirm(`Удалить ${ids.length} пар?`)) return
-
   try {
-    const now = new Date().toISOString()
-    for (const id of ids) {
-      await db.pairs.delete(id)
-      await enqueueDelete('pairs', id, now)
+    const stats = await countCascade('pairs', ids[0])
+    if (!confirm(cascadeConfirmText(`${ids.length} пар(ы)`, stats))) return
+    await cascadeDelete('pairs', ids[0])
+    for (const id of ids.slice(1)) {
+      await cascadeDelete('pairs', id)
     }
     selectedIds.value = new Set()
     await loadPairs()
@@ -206,13 +203,12 @@ onMounted(async () => {
     <table v-if="sortedPairs.length">
       <thead>
         <tr>
-          <th class="col-select">
+          <th v-if="isAdmin" class="col-select">
             <input
               type="checkbox"
               :checked="allSelected"
               :indeterminate="someSelected"
               @change="toggleSelectAll"
-              :disabled="!isAdmin"
             />
           </th>
           <th>№</th>
@@ -222,12 +218,11 @@ onMounted(async () => {
       </thead>
       <tbody>
         <tr v-for="p in sortedPairs" :key="p.id">
-          <td class="col-select">
+          <td v-if="isAdmin" class="col-select">
             <input
               type="checkbox"
               :checked="selectedIds.has(p.id)"
               @change="toggleSelect(p.id)"
-              :disabled="!isAdmin"
             />
           </td>
           <td>{{ p.pair_number }}</td>
@@ -235,9 +230,10 @@ onMounted(async () => {
           <td class="row-actions">
             <RouterLink :to="`/pairs/${p.id}`" class="pair-link">Открыть →</RouterLink>
             <button
+              v-if="isAdmin"
               class="delete-btn"
+              title="Удалить (вместе с кроссами и неисправностями пары)"
               @click="removePair(p.id)"
-              :title="isAdmin ? 'Удалить' : 'Только для администратора'"
             >🗑️</button>
           </td>
         </tr>

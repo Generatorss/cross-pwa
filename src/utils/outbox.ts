@@ -22,3 +22,33 @@ export async function enqueueDelete(collection: string, id: string, now = new Da
     status: 'pending',
   } as OutboxItem)
 }
+
+/**
+ * Ставит в очередь update-операцию (например, отвязку связи при каскадном удалении).
+ * Если запись уже помечена к удалению — update не нужен, пропускаем.
+ */
+export async function enqueueUpdate(
+  collection: string,
+  id: string,
+  patch: Record<string, any>,
+  now = new Date().toISOString()
+) {
+  const hasPendingDelete = await db.outbox
+    .where('status')
+    .equals('pending')
+    .and(
+      (item) =>
+        item.collection === collection && item.recordId === id && item.operation === 'delete'
+    )
+    .count()
+  if (hasPendingDelete) return
+
+  await db.outbox.add({
+    collection,
+    recordId: id,
+    operation: 'update',
+    payload: { ...patch },
+    clientUpdatedAt: now,
+    status: 'pending',
+  } as OutboxItem)
+}

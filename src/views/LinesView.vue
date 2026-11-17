@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useCrud } from '@/composables/useCrud'
+import { useAuth } from '@/composables/useAuth'
 import { syncAll } from '@/sync/engine'
 import { db } from '@/db'
-import { pb } from '@/api/pocketbase'
+import { enqueueDelete, enqueueUpdate } from '@/utils/outbox'
+
+const { isAdmin, isViewer, canEdit } = useAuth()
 
 interface LineRecord {
   id: string
@@ -44,13 +47,30 @@ function cancelEdit() {
 }
 
 async function remove(id: string) {
-  if (pb.authStore.model?.role !== 'admin') {
+  if (!isAdmin.value) {
     alert('Удаление доступно только администратору.')
     return
   }
-  if (!confirm('Удалить линию? Пары, привязанные к ней, останутся без линии.')) return
+  const target = crud.items.value.find((l) => l.id === id)
+  const label = target ? `линию «${target.name}»` : 'линию'
+  const linkedPairs = await db.pairs.where('line').equals(id).toArray()
+  if (
+    !confirm(
+      linkedPairs.length
+        ? `Удалить ${label}? Связь с парами будет снята у ${linkedPairs.length} пар(ы).`
+        : `Удалить ${label}?`
+    )
+  )
+    return
   try {
-    await crud.remove(id)
+    const now = new Date().toISOString()
+    // Отвязываем пары от удаляемой линии (поле необязательное)
+    for (const p of linkedPairs) {
+      await db.pairs.update(p.id, { line: '', updated: now })
+      await enqueueUpdate('pairs', p.id, { line: '' }, now)
+    }
+    await db.lines.delete(id)
+    await enqueueDelete('lines', id, now)
     await refreshPending()
   } catch (e: any) {
     alert(`Ошибка удаления: ${e.message}`)
@@ -93,7 +113,8 @@ onMounted(async () => {
       пары, но называется одинаково.
     </p>
 
-    <form @submit.prevent="save" class="form">
+    <p v-if="isViewer" class="readonly-hint">Режим просмотра: добавление и правка недоступны.</p>
+    <form v-if="canEdit" @submit.prevent="save" class="form">
       <input v-model="form.name" placeholder="Название линии *" required size="50" />
       <input v-model="form.notes" placeholder="Примечания" size="40" />
       <button type="submit">{{ editingId ? 'Сохранить' : 'Добавить' }}</button>
@@ -109,8 +130,8 @@ onMounted(async () => {
           <td>{{ l.name }}</td>
           <td>{{ l.notes }}</td>
           <td class="row-actions">
-            <button @click="edit(l)">✏️</button>
-            <button v-if="pb.authStore.model?.role === 'admin'" @click="remove(l.id)">🗑️</button>
+            <button v-if="canEdit" @click="edit(l)">✏️</button>
+            <button v-if="isAdmin" @click="remove(l.id)">🗑️</button>
           </td>
         </tr>
       </tbody>
@@ -132,4 +153,5 @@ th, td { border-bottom: 1px solid #e5e7eb; padding: 0.5rem; text-align: left; }
 .row-actions { white-space: nowrap; }
 .row-actions button { border: none; background: none; cursor: pointer; font-size: 1.1rem; }
 .sync-status { color: #475569; font-size: 0.9rem; margin-bottom: 0.5rem; }
+.readonly-hint { color: #94a3b8; font-size: 0.85rem; font-style: italic; margin-bottom: 0.5rem; }
 </style>

@@ -46,6 +46,9 @@ export class CrossDB extends Dexie {
       outbox: '++id, collection, recordId, status, clientUpdatedAt',
       meta: 'key',
     })
+    this.version(5).stores({
+      faults: 'id, pair, wire, status, fault_type, updated',
+    })
   }
 }
 

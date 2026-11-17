@@ -2,9 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCrud } from '@/composables/useCrud'
+import { useAuth } from '@/composables/useAuth'
 import { syncAll } from '@/sync/engine'
 import { db } from '@/db'
-import { pb } from '@/api/pocketbase'
+import { countCascade, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
 
 interface RackRecord {
   id: string
@@ -20,6 +21,7 @@ const objectId = ref('')
 const objectName = ref('')
 
 const crud = useCrud<RackRecord>('racks')
+const { isAdmin, isViewer, canEdit } = useAuth()
 const form = ref({ name: '', position: '' })
 const editingId = ref<string | null>(null)
 const syncStatus = ref('')
@@ -60,13 +62,17 @@ function cancelEdit() {
 }
 
 async function remove(id: string) {
-  if (pb.authStore.model?.role !== 'admin') {
+  if (!isAdmin.value) {
     alert('Удаление доступно только администратору.')
     return
   }
-  if (!confirm('Удалить стойку?')) return
+  const target = filteredItems.value.find((r) => r.id === id)
+  const label = target ? `стойку «${target.name}»` : 'стойку'
   try {
-    await crud.remove(id)
+    const stats = await countCascade('racks', id)
+    if (!confirm(cascadeConfirmText(label, stats))) return
+    await cascadeDelete('racks', id)
+    await crud.load()
     await refreshPending()
   } catch (e: any) {
     alert(`Ошибка удаления: ${e.message}`)
@@ -118,7 +124,8 @@ onMounted(async () => {
 
     <p v-if="syncStatus" class="sync-status">{{ syncStatus }}</p>
 
-    <form @submit.prevent="save" class="form">
+    <p v-if="isViewer" class="readonly-hint">Режим просмотра: добавление и правка недоступны.</p>
+    <form v-if="canEdit" @submit.prevent="save" class="form">
       <input v-model="form.name" placeholder="Название стойки *" required />
       <input v-model="form.position" placeholder="Позиция (например, 1)" />
       <button type="submit">{{ editingId ? 'Сохранить' : 'Добавить' }}</button>
@@ -136,8 +143,8 @@ onMounted(async () => {
           </td>
           <td>{{ r.position }}</td>
           <td class="row-actions">
-            <button @click="edit(r)">✏️</button>
-            <button v-if="pb.authStore.model?.role === 'admin'" @click="remove(r.id)">🗑️</button>
+            <button v-if="canEdit" @click="edit(r)">✏️</button>
+            <button v-if="isAdmin" title="Удалить со всем содержимым" @click="remove(r.id)">🗑️</button>
           </td>
         </tr>
       </tbody>
@@ -160,6 +167,7 @@ th, td { border-bottom: 1px solid #e5e7eb; padding: 0.5rem; text-align: left; }
 .row-actions { white-space: nowrap; }
 .row-actions button { border: none; background: none; cursor: pointer; font-size: 1.1rem; }
 .sync-status { color: #475569; font-size: 0.9rem; margin-bottom: 0.5rem; }
+.readonly-hint { color: #94a3b8; font-size: 0.85rem; font-style: italic; margin-bottom: 0.5rem; }
 .rack-link { color: #1e40af; text-decoration: none; }
 .rack-link:hover { text-decoration: underline; }
 </style>

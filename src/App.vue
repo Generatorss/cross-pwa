@@ -23,7 +23,8 @@ function netTitle() {
   const parts: string[] = []
   if (lastSyncAt.value) parts.push(`Последняя синхронизация: ${new Date(lastSyncAt.value).toLocaleString('ru-RU')}`)
   if (lastError.value) parts.push(`Ошибка: ${lastError.value}`)
-  return parts.join(' · ') || 'Автосинхронизация включена'
+  parts.push('Нажмите на индикатор для ручной синхронизации')
+  return parts.join(' · ')
 }
 </script>
 

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useCrud } from '@/composables/useCrud'
+import { useAuth } from '@/composables/useAuth'
 import { syncAll } from '@/sync/engine'
 import { db } from '@/db'
-import { pb } from '@/api/pocketbase'
+import { countCascade, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
+
+const { isAdmin, isViewer, canEdit } = useAuth()
 
 interface ObjectRecord {
   id: string
@@ -45,13 +48,17 @@ function cancelEdit() {
 }
 
 async function remove(id: string) {
-  if (pb.authStore.model?.role !== 'admin') {
+  if (!isAdmin.value) {
     alert('Удаление доступно только администратору.')
     return
   }
-  if (!confirm('Удалить объект?')) return
+  const target = crud.items.value.find((o) => o.id === id)
+  const label = target ? `объект «${target.name}»` : 'объект'
   try {
-    await crud.remove(id)
+    const stats = await countCascade('objects', id)
+    if (!confirm(cascadeConfirmText(label, stats))) return
+    await cascadeDelete('objects', id)
+    await crud.load()
     await refreshPending()
   } catch (e: any) {
     alert(`Ошибка удаления: ${e.message}`)
@@ -88,7 +95,8 @@ onMounted(async () => {
 
     <p v-if="syncStatus" class="sync-status">{{ syncStatus }}</p>
 
-    <form @submit.prevent="save" class="form">
+    <p v-if="isViewer" class="readonly-hint">Режим просмотра: добавление и правка недоступны.</p>
+    <form v-if="canEdit" @submit.prevent="save" class="form">
       <input v-model="form.name" placeholder="Название *" required />
       <input v-model="form.address" placeholder="Адрес" />
       <input v-model="form.notes" placeholder="Примечания" />
@@ -108,8 +116,8 @@ onMounted(async () => {
           <td>{{ o.address }}</td>
           <td>{{ o.notes }}</td>
           <td class="row-actions">
-            <button @click="edit(o)">✏️</button>
-            <button v-if="pb.authStore.model?.role === 'admin'" @click="remove(o.id)">🗑️</button>
+            <button v-if="canEdit" @click="edit(o)">✏️</button>
+            <button v-if="isAdmin" title="Удалить со всем содержимым" @click="remove(o.id)">🗑️</button>
           </td>
         </tr>
       </tbody>
@@ -130,6 +138,7 @@ th, td { border-bottom: 1px solid #e5e7eb; padding: 0.5rem; text-align: left; }
 .row-actions { white-space: nowrap; }
 .row-actions button { border: none; background: none; cursor: pointer; font-size: 1.1rem; }
 .sync-status { color: #475569; font-size: 0.9rem; margin-bottom: 0.5rem; }
+.readonly-hint { color: #94a3b8; font-size: 0.85rem; font-style: italic; margin-bottom: 0.5rem; }
 .object-link { color: #1e40af; text-decoration: none; }
 .object-link:hover { text-decoration: underline; }
 </style>

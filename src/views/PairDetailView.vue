@@ -2,21 +2,19 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { db } from '@/db'
-import { pb } from '@/api/pocketbase'
+import { useAuth } from '@/composables/useAuth'
 import { useCross } from '@/composables/useCross'
 import { resolvePairContext, ctxLabel, type PairContext } from '@/utils/resolve'
 
 const route = useRoute()
 const pairId = route.params.pairId as string
+const { isAdmin, canEdit } = useAuth()
 
 const pair = ref<any>(null)
 const ctx = ref<PairContext | null>(null)
 const plintNumber = ref('')
 const lineName = ref('')
 const cableConnected = ref(false)
-
-const isAdmin = computed(() => pb.authStore.model?.role === 'admin')
-const canEdit = computed(() => ['editor', 'admin'].includes(pb.authStore.model?.role || ''))
 
 // ---- кроссовые соединения ----
 const cross = useCross(pairId)
