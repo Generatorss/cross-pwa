@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "dexie": "^4.0.0",
-    "pocketbase": "^0.22.0",
+    "pocketbase": "^0.40.6",
     "vue": "^3.5.0",
     "vue-router": "^4.4.0"
   },
