@@ -13,7 +13,11 @@ export async function pushOutbox(): Promise<{ synced: number; failed: number }> 
       } else if (item.operation === 'update') {
         await pb.collection(item.collection).update(item.recordId, item.payload)
       } else if (item.operation === 'delete') {
-        await pb.collection(item.collection).delete(item.recordId)
+        try {
+          await pb.collection(item.collection).delete(item.recordId)
+        } catch (e: any) {
+          if (e?.status !== 404) throw e
+        }
       }
       await db.outbox.update(item.id!, { status: 'synced' })
       synced++
@@ -28,26 +32,42 @@ export async function pushOutbox(): Promise<{ synced: number; failed: number }> 
 }
 
 export async function pullChanges(collection: string, checkpointKey: string): Promise<number> {
-  const meta = await db.meta.get(checkpointKey)
-  const checkpoint = meta?.value || '1970-01-01 00:00:00.000Z'
+  // Полный список с сервера — нужен для обнаружения удалений.
+  const serverRecords = await pb.collection(collection).getFullList()
+  const serverIds = new Set(serverRecords.map((r: any) => r.id))
 
-  const records = await pb.collection(collection).getFullList({
-    filter: `updated > "${checkpoint}"`,
-    sort: 'updated',
-  })
+  // Записи с pending в outbox не трогаем — их судьба решается на push.
+  const pendingItems = await db.outbox.where('status').equals('pending').toArray()
+  const pendingIds = new Set(
+    pendingItems.filter((p) => p.collection === collection).map((p) => p.recordId)
+  )
 
-  for (const rec of records) {
+  // 1) Upsert: то, что есть на сервере, сохраняем локально (обновляем или создаём).
+  for (const rec of serverRecords) {
     await db.table(collection).put(rec)
   }
-  if (records.length > 0) {
-    await db.meta.put({ key: checkpointKey, value: records[records.length - 1].updated })
+
+  // 2) Reconcile: удаляем локальные записи, которых нет на сервере,
+  //    но только если по ним нет pending-операции в outbox.
+  const localRecords = await db.table(collection).toArray()
+  let deleted = 0
+  for (const local of localRecords) {
+    if (!serverIds.has(local.id) && !pendingIds.has(local.id)) {
+      await db.table(collection).delete(local.id)
+      deleted++
+    }
   }
-  return records.length
+
+  // checkpointKey оставлен для совместимости — можно использовать для метрик.
+  await db.meta.put({ key: checkpointKey, value: new Date().toISOString() })
+
+  return serverRecords.length
 }
 
 const COLLECTIONS = [
   'objects', 'cabinets', 'racks', 'boxes', 'plints', 'pairs',
   'cables', 'cores', 'cross_connections', 'local_equipment',
+  'lines', 'fault_types', 'faults',
 ] as const
 
 export async function syncAll(): Promise<{ pushed: number; pulled: number; failed: number }> {

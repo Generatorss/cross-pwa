@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useCrud } from '@/composables/useCrud'
 import { syncAll } from '@/sync/engine'
 import { db } from '@/db'
+import { pb } from '@/api/pocketbase'
 
 interface ObjectRecord {
   id: string
@@ -41,6 +42,20 @@ function edit(o: ObjectRecord) {
 function cancelEdit() {
   editingId.value = null
   form.value = { name: '', address: '', notes: '' }
+}
+
+async function remove(id: string) {
+  if (pb.authStore.model?.role !== 'admin') {
+    alert('Удаление доступно только администратору.')
+    return
+  }
+  if (!confirm('Удалить объект?')) return
+  try {
+    await crud.remove(id)
+    await refreshPending()
+  } catch (e: any) {
+    alert(`Ошибка удаления: ${e.message}`)
+  }
 }
 
 async function sync() {
@@ -87,12 +102,14 @@ onMounted(async () => {
       </thead>
       <tbody>
         <tr v-for="o in crud.items.value" :key="o.id">
-          <td>{{ o.name }}</td>
+          <td>
+            <RouterLink :to="`/objects/${o.id}/cabinets`" class="object-link">{{ o.name }}</RouterLink>
+          </td>
           <td>{{ o.address }}</td>
           <td>{{ o.notes }}</td>
           <td class="row-actions">
             <button @click="edit(o)">✏️</button>
-            <button @click="crud.remove(o.id).then(refreshPending)">🗑️</button>
+            <button v-if="pb.authStore.model?.role === 'admin'" @click="remove(o.id)">🗑️</button>
           </td>
         </tr>
       </tbody>
@@ -102,62 +119,17 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-.actions {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-.badge {
-  background: #fbbf24;
-  padding: 0.2rem 0.6rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
-}
-.form {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-bottom: 1rem;
-}
-.form input {
-  padding: 0.4rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-}
-.form button {
-  padding: 0.4rem 0.8rem;
-  border: 1px solid #ccc;
-  background: #fff;
-  border-radius: 6px;
-  cursor: pointer;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th, td {
-  border-bottom: 1px solid #e5e7eb;
-  padding: 0.5rem;
-  text-align: left;
-}
-.row-actions {
-  white-space: nowrap;
-}
-.row-actions button {
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 1.1rem;
-}
-.sync-status {
-  color: #475569;
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
-}
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.actions { display: flex; gap: 0.5rem; align-items: center; }
+.badge { background: #fbbf24; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; }
+.form { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.form input { padding: 0.4rem; border: 1px solid #ccc; border-radius: 6px; }
+.form button { padding: 0.4rem 0.8rem; border: 1px solid #ccc; background: #fff; border-radius: 6px; cursor: pointer; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border-bottom: 1px solid #e5e7eb; padding: 0.5rem; text-align: left; }
+.row-actions { white-space: nowrap; }
+.row-actions button { border: none; background: none; cursor: pointer; font-size: 1.1rem; }
+.sync-status { color: #475569; font-size: 0.9rem; margin-bottom: 0.5rem; }
+.object-link { color: #1e40af; text-decoration: none; }
+.object-link:hover { text-decoration: underline; }
 </style>

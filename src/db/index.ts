@@ -23,20 +23,26 @@ export class CrossDB extends Dexie {
   local_equipment!: Table<any>
   outbox!: Table<OutboxItem, number>
   meta!: Table<{ key: string; value: any }>
+  lines!: Table<any>
+  fault_types!: Table<any>
+  faults!: Table<any>
 
   constructor() {
     super('CrossDB')
-    this.version(2).stores({
+    this.version(4).stores({
       objects: 'id, name, updated',
       cabinets: 'id, object, name, updated',
       racks: 'id, cabinet, name, updated',
       boxes: 'id, rack, number, updated',
       plints: 'id, box, number, updated',
-      pairs: 'id, plint, pair_number, updated',
+      pairs: 'id, plint, pair_number, line, cable_connected, updated',
       cables: 'id, name, from_object, to_object, updated',
       cores: 'id, cable, core_number, updated',
-      cross_connections: 'id, from_pair, to_pair, updated',
+      cross_connections: 'id, from_pair, to_pair, line, updated',
       local_equipment: 'id, object, connected_pair, updated',
+      lines: 'id, name, updated',
+      fault_types: 'id, name, updated',
+      faults: 'id, pair, wire, status, updated',
       outbox: '++id, collection, recordId, status, clientUpdatedAt',
       meta: 'key',
     })
