@@ -71,6 +71,25 @@ export async function countCascade(collection: string, id: string): Promise<Casc
   return stats
 }
 
+/**
+ * Подсчёт для массового удаления: суммарная статистика по всем выбранным узлам.
+ * Множества дедупликации общие, поэтому соединение двух выбранных пар
+ * или общие потомки не считаются дважды.
+ */
+export async function countCascadeMany(
+  collection: string,
+  ids: string[]
+): Promise<CascadeStats> {
+  const stats = emptyStats()
+  const seen = new Set<string>()
+  const countedCross = new Set<string>()
+  const deletedObjects = new Set<string>()
+  for (const id of ids) {
+    await collect(collection, id, stats, seen, countedCross, deletedObjects)
+  }
+  return stats
+}
+
 async function collect(
   collection: string,
   id: string,

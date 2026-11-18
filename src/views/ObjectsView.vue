@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useCrud } from '@/composables/useCrud'
 import { useAuth } from '@/composables/useAuth'
 import { syncAll } from '@/sync/engine'
 import { db } from '@/db'
-import { countCascade, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
+import { countCascade, countCascadeMany, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
 
 const { isAdmin, isViewer, canEdit } = useAuth()
 
@@ -20,6 +20,29 @@ const form = ref({ name: '', address: '', notes: '' })
 const editingId = ref<string | null>(null)
 const syncStatus = ref('')
 const pendingCount = ref(0)
+const selectedIds = ref<Set<string>>(new Set())
+
+const allSelected = computed(
+  () => crud.items.value.length > 0 && selectedIds.value.size === crud.items.value.length
+)
+const someSelected = computed(
+  () => selectedIds.value.size > 0 && selectedIds.value.size < crud.items.value.length
+)
+
+function toggleSelect(id: string) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(crud.items.value.map((o) => o.id))
+  }
+}
 
 async function refreshPending() {
   pendingCount.value = await db.outbox.where('status').equals('pending').count()
@@ -65,6 +88,28 @@ async function remove(id: string) {
   }
 }
 
+/** Массовое каскадное удаление выбранных объектов. */
+async function deleteSelected() {
+  if (!isAdmin.value) {
+    alert('Удаление доступно только администратору.')
+    return
+  }
+  const ids = Array.from(selectedIds.value)
+  if (ids.length === 0) return
+  try {
+    const stats = await countCascadeMany('objects', ids)
+    if (!confirm(cascadeConfirmText(`${ids.length} объект(ов)`, stats))) return
+    for (const id of ids) {
+      await cascadeDelete('objects', id)
+    }
+    selectedIds.value = new Set()
+    await crud.load()
+    await refreshPending()
+  } catch (e: any) {
+    alert(`Ошибка удаления: ${e.message}`)
+  }
+}
+
 async function sync() {
   syncStatus.value = 'Синхронизация…'
   try {
@@ -90,6 +135,13 @@ onMounted(async () => {
       <div class="actions">
         <span class="badge" v-if="pendingCount">📤 {{ pendingCount }}</span>
         <button @click="sync">Синхронизировать</button>
+        <button
+          v-if="selectedIds.size > 0 && isAdmin"
+          class="danger"
+          @click="deleteSelected"
+        >
+          Удалить выбранные ({{ selectedIds.size }})
+        </button>
       </div>
     </div>
 
@@ -106,10 +158,27 @@ onMounted(async () => {
 
     <table v-if="crud.items.value.length">
       <thead>
-        <tr><th>Название</th><th>Адрес</th><th>Примечания</th><th></th></tr>
+        <tr>
+          <th v-if="isAdmin" class="col-select">
+            <input
+              type="checkbox"
+              :checked="allSelected"
+              :indeterminate="someSelected"
+              @change="toggleSelectAll"
+            />
+          </th>
+          <th>Название</th><th>Адрес</th><th>Примечания</th><th></th>
+        </tr>
       </thead>
       <tbody>
         <tr v-for="o in crud.items.value" :key="o.id">
+          <td v-if="isAdmin" class="col-select">
+            <input
+              type="checkbox"
+              :checked="selectedIds.has(o.id)"
+              @change="toggleSelect(o.id)"
+            />
+          </td>
           <td>
             <RouterLink :to="`/objects/${o.id}/cabinets`" class="object-link">{{ o.name }}</RouterLink>
           </td>
@@ -128,7 +197,12 @@ onMounted(async () => {
 
 <style scoped>
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-.actions { display: flex; gap: 0.5rem; align-items: center; }
+.actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.actions button { padding: 0.4rem 0.8rem; border: 1px solid #ccc; background: #fff; border-radius: 6px; cursor: pointer; }
+.actions button.danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+.actions button.danger:hover { background: #b91c1c; }
+.col-select { width: 32px; text-align: center; }
+.col-select input { cursor: pointer; }
 .badge { background: #fbbf24; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; }
 .form { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .form input { padding: 0.4rem; border: 1px solid #ccc; border-radius: 6px; }

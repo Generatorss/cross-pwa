@@ -5,7 +5,7 @@ import { usePlints, type PlintRecord } from '@/composables/usePlints'
 import { useAuth } from '@/composables/useAuth'
 import { syncAll } from '@/sync/engine'
 import { db } from '@/db'
-import { countCascade, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
+import { countCascade, countCascadeMany, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
 
 const route = useRoute()
 const boxId = route.params.boxId as string
@@ -118,7 +118,7 @@ async function deleteSelected() {
   const ids = Array.from(selectedIds.value)
   if (ids.length === 0) return
   try {
-    const stats = await countCascade('plints', ids[0])
+    const stats = await countCascadeMany('plints', ids)
     if (!confirm(cascadeConfirmText(`${ids.length} плинт(ов)`, stats))) return
     await deleteCascade(ids)
     selectedIds.value = new Set()

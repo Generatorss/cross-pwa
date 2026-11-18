@@ -5,7 +5,7 @@ import { useCrud } from '@/composables/useCrud'
 import { useAuth } from '@/composables/useAuth'
 import { syncAll } from '@/sync/engine'
 import { db } from '@/db'
-import { countCascade, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
+import { countCascade, countCascadeMany, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
 
 interface BoxRecord {
   id: string
@@ -121,7 +121,7 @@ async function deleteSelected() {
   const ids = Array.from(selectedIds.value)
   if (ids.length === 0) return
   try {
-    const stats = await countCascade('boxes', ids[0])
+    const stats = await countCascadeMany('boxes', ids)
     if (!confirm(cascadeConfirmText(`${ids.length} бокс(ов)`, stats))) return
     await deleteCascade(ids)
     selectedIds.value = new Set()

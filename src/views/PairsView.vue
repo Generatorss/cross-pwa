@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { syncAll } from '@/sync/engine'
 import { db, type OutboxItem } from '@/db'
 import { useAuth } from '@/composables/useAuth'
-import { countCascade, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
+import { countCascade, countCascadeMany, cascadeDelete, cascadeConfirmText } from '@/utils/cascade'
 
 interface PairRecord {
   id: string
@@ -104,7 +104,7 @@ async function deleteSelected() {
   if (ids.length === 0) return
 
   try {
-    const stats = await countCascade('pairs', ids[0])
+    const stats = await countCascadeMany('pairs', ids)
     if (!confirm(cascadeConfirmText(`${ids.length} пар(ы)`, stats))) return
     await cascadeDelete('pairs', ids[0])
     for (const id of ids.slice(1)) {
